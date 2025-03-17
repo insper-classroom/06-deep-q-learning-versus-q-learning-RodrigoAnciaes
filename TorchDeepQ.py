@@ -5,7 +5,7 @@ import torch.nn as nn
 import gc
 
 class DeepQLearning:
-    def __init__(self, env, gamma, epsilon, epsilon_min, epsilon_dec, episodes, batch_size, memory, model, max_steps, optimizer, loss_fn):
+    def __init__(self, env, gamma, epsilon, epsilon_min, epsilon_dec, episodes, batch_size, memory, model, max_steps, optimizer, loss_fn, target_model=None, update_target_every=10):
         self.env = env
         self.gamma = gamma
         self.epsilon = epsilon
@@ -18,6 +18,9 @@ class DeepQLearning:
         self.max_steps = max_steps
         self.optimizer = optimizer
         self.loss_fn = loss_fn
+        # Use a separate target model if provided, otherwise use the online model.
+        self.target_model = target_model if target_model is not None else model
+        self.update_target_every = update_target_every
 
     def select_action(self, state):
         if np.random.rand() < self.epsilon:
@@ -44,19 +47,19 @@ class DeepQLearning:
         terminals = np.array([exp[4] for exp in batch]).astype(np.uint8)
 
         # Convert to torch tensors and squeeze the extra dimension
-        states_tensor = torch.FloatTensor(states).squeeze(1)         # Now shape: (batch_size, input_dim)
-        next_states_tensor = torch.FloatTensor(next_states).squeeze(1)  # Now shape: (batch_size, input_dim)
+        states_tensor = torch.FloatTensor(states).squeeze(1)         # shape: (batch_size, input_dim)
+        next_states_tensor = torch.FloatTensor(next_states).squeeze(1)  # shape: (batch_size, input_dim)
         actions_tensor = torch.LongTensor(actions).unsqueeze(1)         # shape: (batch_size, 1)
         rewards_tensor = torch.FloatTensor(rewards).unsqueeze(1)
         terminals_tensor = torch.FloatTensor(terminals).unsqueeze(1)
 
-        # Compute current Q values for the batch of states
+        # Compute current Q values for the batch of states using the online model
         self.model.train()
         q_values = self.model(states_tensor)  # Expected shape: (batch_size, num_actions)
 
-        # Compute Q values for next states (without gradient tracking)
+        # Use the target network to compute Q values for next states (without gradient tracking)
         with torch.no_grad():
-            next_q_values = self.model(next_states_tensor)
+            next_q_values = self.target_model(next_states_tensor)
         next_max, _ = torch.max(next_q_values, dim=1, keepdim=True)
 
         # Compute the target Q values
@@ -98,4 +101,7 @@ class DeepQLearning:
                     break
             rewards_all.append(score)
             gc.collect()
+            # Update the target network periodically
+            if i % self.update_target_every == 0:
+                self.target_model.load_state_dict(self.model.state_dict())
         return rewards_all
