@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from collections import deque
-from DeepQLearning import DeepQLearning
+from TorchDeepQ import DeepQLearning
 
 # Define the Q-Network using PyTorch
 class QNetwork(nn.Module):

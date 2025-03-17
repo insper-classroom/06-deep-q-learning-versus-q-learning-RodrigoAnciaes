@@ -43,16 +43,16 @@ class DeepQLearning:
         next_states = np.array([exp[3] for exp in batch])
         terminals = np.array([exp[4] for exp in batch]).astype(np.uint8)
 
-        # Convert to torch tensors
-        states_tensor = torch.FloatTensor(states)
-        next_states_tensor = torch.FloatTensor(next_states)
-        actions_tensor = torch.LongTensor(actions).unsqueeze(1)  # shape: (batch_size, 1)
+        # Convert to torch tensors and squeeze the extra dimension
+        states_tensor = torch.FloatTensor(states).squeeze(1)         # Now shape: (batch_size, input_dim)
+        next_states_tensor = torch.FloatTensor(next_states).squeeze(1)  # Now shape: (batch_size, input_dim)
+        actions_tensor = torch.LongTensor(actions).unsqueeze(1)         # shape: (batch_size, 1)
         rewards_tensor = torch.FloatTensor(rewards).unsqueeze(1)
         terminals_tensor = torch.FloatTensor(terminals).unsqueeze(1)
 
         # Compute current Q values for the batch of states
         self.model.train()
-        q_values = self.model(states_tensor)
+        q_values = self.model(states_tensor)  # Expected shape: (batch_size, num_actions)
 
         # Compute Q values for next states (without gradient tracking)
         with torch.no_grad():
@@ -63,7 +63,7 @@ class DeepQLearning:
         targets = rewards_tensor + self.gamma * next_max * (1 - terminals_tensor)
 
         # Select Q values corresponding to the actions taken
-        q_selected = q_values.gather(1, actions_tensor)
+        q_selected = torch.gather(q_values, 1, actions_tensor)
 
         loss = self.loss_fn(q_selected, targets)
 
