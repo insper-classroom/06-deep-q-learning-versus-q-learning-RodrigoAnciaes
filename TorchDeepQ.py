@@ -46,34 +46,38 @@ class DeepQLearning:
         next_states = np.array([exp[3] for exp in batch])
         terminals = np.array([exp[4] for exp in batch]).astype(np.uint8)
 
-        # Convert to torch tensors and squeeze the extra dimension
+        # Convert arrays to torch tensors
         states_tensor = torch.FloatTensor(states).squeeze(1)         # shape: (batch_size, input_dim)
-        next_states_tensor = torch.FloatTensor(next_states).squeeze(1)  # shape: (batch_size, input_dim)
-        actions_tensor = torch.LongTensor(actions).unsqueeze(1)         # shape: (batch_size, 1)
+        next_states_tensor = torch.FloatTensor(next_states).squeeze(1)   # shape: (batch_size, input_dim)
+        actions_tensor = torch.LongTensor(actions).unsqueeze(1)          # shape: (batch_size, 1)
         rewards_tensor = torch.FloatTensor(rewards).unsqueeze(1)
         terminals_tensor = torch.FloatTensor(terminals).unsqueeze(1)
 
-        # Compute current Q values for the batch of states using the online model
+        # Compute current Q-values for the batch of states using the online model
         self.model.train()
-        q_values = self.model(states_tensor)  # Expected shape: (batch_size, num_actions)
+        q_values = self.model(states_tensor)
 
-        # Use the target network to compute Q values for next states (without gradient tracking)
+        # Double DQN modification:
+        # 1. Use the online model to select the best next actions.
+        # 2. Evaluate those actions using the target model.
         with torch.no_grad():
-            next_q_values = self.target_model(next_states_tensor)
-        next_max, _ = torch.max(next_q_values, dim=1, keepdim=True)
+            next_actions = torch.argmax(self.model(next_states_tensor), dim=1, keepdim=True)
+            next_q_values_target = self.target_model(next_states_tensor)
+            next_q_values = torch.gather(next_q_values_target, 1, next_actions)
 
-        # Compute the target Q values
-        targets = rewards_tensor + self.gamma * next_max * (1 - terminals_tensor)
+        # Compute the target Q-values
+        targets = rewards_tensor + self.gamma * next_q_values * (1 - terminals_tensor)
 
-        # Select Q values corresponding to the actions taken
+        # Select the Q-values corresponding to the actions taken in the batch
         q_selected = torch.gather(q_values, 1, actions_tensor)
 
+        # Compute loss and backpropagate
         loss = self.loss_fn(q_selected, targets)
-
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
+        # Decay the epsilon value to reduce exploration over time
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_dec
 
@@ -97,7 +101,7 @@ class DeepQLearning:
                 state = next_state
                 self.experience_replay()
                 if done:
-                    print(f'Episode: {i+1}/{self.episodes}. Score: {score}')
+                    print(f'Episode: {i+1}/{self.episodes}. Score: {score}, Epsilon: {self.epsilon}')
                     break
             rewards_all.append(score)
             gc.collect()
