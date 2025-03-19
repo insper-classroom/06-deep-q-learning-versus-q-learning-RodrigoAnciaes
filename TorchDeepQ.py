@@ -77,10 +77,6 @@ class DeepQLearning:
         loss.backward()
         self.optimizer.step()
 
-        # Decay the epsilon value to reduce exploration over time
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_dec
-
     def train(self):
         rewards_all = []
         for i in range(self.episodes + 1):
@@ -102,6 +98,9 @@ class DeepQLearning:
                 self.experience_replay()
                 if done:
                     print(f'Episode: {i+1}/{self.episodes}. Score: {score}, Epsilon: {self.epsilon}')
+                    # Decay the epsilon value to reduce exploration over time
+                    if self.epsilon > self.epsilon_min:
+                        self.epsilon *= self.epsilon_dec
                     break
             rewards_all.append(score)
             gc.collect()
