@@ -12,16 +12,14 @@ from TorchDeepQ import DeepQLearning
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, output_dim)
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.fc2 = nn.Linear(64, output_dim)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        return self.fc3(x)
+        return self.fc2(x)
 
-env = gym.make('CartPole-v1')
+env = gym.make('LunarLander-v3')
 np.random.seed(0)
 torch.manual_seed(0)
 
@@ -34,20 +32,19 @@ output_dim = env.action_space.n
 model = QNetwork(input_dim, output_dim)
 print(model)
 
-optimizer = optim.Adam(model.parameters(), lr=0.00007)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 loss_fn = nn.MSELoss()
 
 target_model = QNetwork(input_dim, output_dim)
 target_model.load_state_dict(model.state_dict())
 target_model.eval()
 
-
 gamma = 0.99 
 epsilon = 1.0
 epsilon_min = 0.001
 epsilon_dec = 0.99
 episodes = 1000
-batch_size = 64
+batch_size = 128
 memory = deque(maxlen=10000)  # Experience replay memory
 max_steps = 500
 
@@ -58,10 +55,10 @@ plt.plot(rewards)
 plt.xlabel('Episodes')
 plt.ylabel('# Rewards')
 plt.title('# Rewards vs Episodes')
-plt.savefig("results/cartpole_DeepQLearning.jpg")
+plt.savefig("results/LunarLander_DeepQLearning.jpg")
 plt.close()
 
-with open('results/cartpole_DeepQLearning_rewards.csv', 'a', newline='') as file:
+with open('results/LunarLander_DeepQLearning_rewards.csv', 'a', newline='') as file:
     writer = csv.writer(file)
     for episode, reward in enumerate(rewards):
         writer.writerow([episode, reward])

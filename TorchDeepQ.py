@@ -3,6 +3,7 @@ import random
 import torch
 import torch.nn as nn
 import gc
+import tqdm
 
 class DeepQLearning:
     def __init__(self, env, gamma, epsilon, epsilon_min, epsilon_dec, episodes, batch_size, memory, model, max_steps, optimizer, loss_fn, target_model=None, update_target_every=10):
@@ -79,7 +80,7 @@ class DeepQLearning:
 
     def train(self):
         rewards_all = []
-        for i in range(self.episodes + 1):
+        for i in tqdm.tqdm(range(self.episodes)):
             state, _ = self.env.reset()
             state = np.reshape(state, (1, self.env.observation_space.shape[0]))
             score = 0
@@ -97,7 +98,7 @@ class DeepQLearning:
                 state = next_state
                 self.experience_replay()
                 if done:
-                    print(f'Episode: {i+1}/{self.episodes}. Score: {score}, Epsilon: {self.epsilon}')
+                    #print(f'Episode: {i+1}/{self.episodes}. Score: {score}, Epsilon: {self.epsilon}')
                     # Decay the epsilon value to reduce exploration over time
                     if self.epsilon > self.epsilon_min:
                         self.epsilon *= self.epsilon_dec
