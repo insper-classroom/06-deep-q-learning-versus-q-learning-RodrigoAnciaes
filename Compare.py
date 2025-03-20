@@ -116,10 +116,7 @@ class QLearning:
                 # Custom reward shaping to speed up learning
                 position, velocity = next_state
                 shaped_reward = reward
-                if position > state[0]:  # Moving right
-                    shaped_reward += 0.1
-                if velocity > 0:  # Moving with positive velocity
-                    shaped_reward += 0.1 * velocity
+                shaped_reward += 10 * abs(velocity)
                 
                 # Update Q-table
                 self.update_q_table(state, action, shaped_reward, next_state, done)
@@ -284,13 +281,16 @@ class DeepQLearning:
                 steps += 1
                 action = self.select_action(state)
                 next_state, reward, terminal, truncated, _ = self.env.step(action)
+
+                shaped_reward = reward
+                shaped_reward += 10 * abs(next_state[1])  # Speeding up learning
                 
                 if terminal or truncated or (steps > self.max_steps):
                     done = True
                     
                 # Add to memory
                 next_state = np.reshape(next_state, (1, self.input_dim))
-                self.memory.append((state, action, reward, next_state, done))
+                self.memory.append((state, action, shaped_reward, next_state, done))
                 
                 # Update state and score
                 state = next_state
@@ -345,7 +345,7 @@ def run_qlearning(run_id, seed=None, max_episodes=1000):
         random.seed(seed_value)
         env.action_space.seed(seed_value)
     
-    # Hyperparameters
+    # Q-learning hyperparameters
     learning_rate = 0.1
     gamma = 0.99
     epsilon = 1.0
@@ -496,10 +496,8 @@ def plot_comparison(q_learning_rewards, dqn_rewards, q_times, dqn_times, smoothi
     # Create a table with statistics
     data = [
         ['Metric', 'Q-Learning', 'DQN'],
-        ['Avg. Final Reward', f'{np.mean(q_final_rewards):.2f}', f'{np.mean(dqn_final_rewards):.2f}'],
-        ['Std. Final Reward', f'{np.std(q_final_rewards):.2f}', f'{np.std(dqn_final_rewards):.2f}'],
+        ['Avg. Final 100 Reward', f'{np.mean(q_final_rewards):.2f}', f'{np.mean(dqn_final_rewards):.2f}'],
         ['Avg. Training Time (s)', f'{q_avg_time:.2f}', f'{dqn_avg_time:.2f}'],
-        ['Avg. Episodes to Convergence', f'{q_avg_episodes:.1f}', f'{dqn_avg_episodes:.1f}'],
     ]
     
     table = plt.table(cellText=data, loc='center', cellLoc='center', colWidths=[0.3, 0.3, 0.3])
@@ -543,7 +541,7 @@ def plot_comparison(q_learning_rewards, dqn_rewards, q_times, dqn_times, smoothi
 def main():
     parser = argparse.ArgumentParser(description='Compare Q-Learning and DQN for Mountain Car')
     parser.add_argument('--runs', type=int, default=5, help='Number of runs for each algorithm (default: 5)')
-    parser.add_argument('--episodes', type=int, default=1000, help='Maximum number of episodes per run (default: 1000)')
+    parser.add_argument('--episodes', type=int, default=5000, help='Maximum number of episodes per run (default: 1000)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility (default: 42)')
     parser.add_argument('--load', action='store_true', help='Load previously saved results instead of running new experiments')
     

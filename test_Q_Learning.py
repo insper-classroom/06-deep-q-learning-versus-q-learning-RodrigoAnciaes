@@ -197,7 +197,7 @@ def save_frames_as_video(frames, filename='mountain_car.mp4', fps=30):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test a trained Mountain Car Q-learning agent')
-    parser.add_argument('--q_table', type=str, default='../data/q_table_best.npy',
+    parser.add_argument('--q_table', type=str, default='data/q_table_best.npy',
                         help='Path to the Q-table file')
     parser.add_argument('--episodes', type=int, default=5,
                         help='Number of episodes to run')

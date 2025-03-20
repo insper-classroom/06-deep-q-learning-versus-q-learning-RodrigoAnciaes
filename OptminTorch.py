@@ -146,10 +146,13 @@ class OptimizedDeepQLearning:
                 next_state, reward, terminal, truncated, _ = self.env.step(action)
                 if terminal or truncated or (steps > self.max_steps):
                     done = True
-                    
+                
+                speed = next_state[1]
+                position = next_state[0]
+                shaped_reward = reward + 10 * abs(speed)
                 score += reward
                 next_state = np.reshape(next_state, (1, self.env.observation_space.shape[0]))
-                self.experience(state, action, reward, next_state, terminal)
+                self.experience(state, action, shaped_reward, next_state, terminal)
                 state = next_state
                 
                 if len(self.memory) >= self.batch_size:

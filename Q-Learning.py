@@ -106,10 +106,7 @@ class QLearning:
                 position, velocity = next_state
                 # Reward for moving right with positive velocity
                 shaped_reward = reward
-                # if position > state[0]:  # Moving right
-                #     shaped_reward += 0.1
-                # if velocity > 0:  # Moving with positive velocity
-                #     shaped_reward += 0.1 * velocity
+                shaped_reward += 10 * abs(velocity)  # Additional reward for speed
                 
                 # Update Q-table
                 self.update_q_table(state, action, shaped_reward, next_state, done)
@@ -202,39 +199,6 @@ def run_training(run_number, episodes=1000):
     env.close()
     return rewards, training_time
 
-def test_agent(q_table_file, num_episodes=10, render=True):
-    """Test a trained Q-learning agent"""
-    env = gym.make('MountainCar-v0', render_mode='human' if render else None)
-    
-    # Create a temporary agent to hold the Q-table
-    agent = QLearning(env, 0.1, 0.99, 0, 0, 0, 1, 200)
-    agent.load_q_table(q_table_file)
-    
-    rewards = []
-    
-    for episode in range(num_episodes):
-        state, _ = env.reset()
-        total_reward = 0
-        done = False
-        steps = 0
-        
-        while not done:
-            steps += 1
-            action = np.argmax(agent.q_table[agent._discretize_state(state)])
-            next_state, reward, terminated, truncated, _ = env.step(action)
-            done = terminated or truncated or steps > 200
-            state = next_state
-            total_reward += reward
-            
-            if render:
-                time.sleep(0.01)  # Slow down rendering
-        
-        rewards.append(total_reward)
-        print(f"Episode {episode+1}: Reward = {total_reward}, Steps = {steps}")
-    
-    env.close()
-    return rewards
-
 if __name__ == "__main__":
     num_runs = 5
     episodes = 10000
@@ -325,9 +289,3 @@ if __name__ == "__main__":
     print(f"Average training time: {avg_time:.2f} seconds per run")
     print(f"Total time for all runs: {overall_time:.2f} seconds")
     print(f"Results saved to results/MountainCar_QLearning_multiple_runs.jpg")
-    
-    # Ask if user wants to see the best agent in action
-    response = input("\nDo you want to see the best agent in action? (y/n): ")
-    if response.lower() == 'y':
-        print("\nRunning the best agent...")
-        test_agent('data/q_table_best.npy', num_episodes=3, render=True)
