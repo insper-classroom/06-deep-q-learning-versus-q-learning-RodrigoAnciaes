@@ -718,7 +718,7 @@ def test_trained_agent(algorithm, run_id, render=False, max_episodes=10, seed=No
 
 def plot_test_results(algorithm, rewards_list, run_ids, file_prefix="test_results"):
     """
-    Plot the results of testing trained agents.
+    Plot the results of testing trained agents with styling similar to the training plots.
     
     Parameters:
         algorithm (str): 'q_learning', 'dqn', or 'both'
@@ -733,8 +733,11 @@ def plot_test_results(algorithm, rewards_list, run_ids, file_prefix="test_result
     import os
     os.makedirs("comparison", exist_ok=True)
     
-    # Set up the plot
-    plt.figure(figsize=(12, 8))
+    # Create two subplots similar to the training plot
+    plt.figure(figsize=(15, 10))
+    
+    # Upper subplot for the rewards
+    plt.subplot(2, 1, 1)
     
     # Choose colors based on algorithm
     colors = []
@@ -751,51 +754,111 @@ def plot_test_results(algorithm, rewards_list, run_ids, file_prefix="test_result
         labels = ['Q-Learning', 'DQN']
     
     # Plot the rewards for each episode
+    avg_rewards = []
+    
     for i, rewards in enumerate(rewards_list):
         episodes = range(1, len(rewards) + 1)
-        alg_label = labels[0] if algorithm != 'both' else labels[i]
-        run_label = f"{alg_label} (Run {run_ids[i]})"
+        color_idx = 0 if algorithm != 'both' else i
+        alg_label = labels[color_idx]
         
-        plt.plot(episodes, rewards, marker='o', color=colors[0] if algorithm != 'both' else colors[i], 
-                 label=run_label, linewidth=2, markersize=8)
+        # Plot individual rewards with lower alpha
+        plt.plot(episodes, rewards, alpha=0.4, color=colors[color_idx], 
+                 label=f"{alg_label} (Run {run_ids[i]})")
         
-        # Calculate and print average reward
+        # Calculate average reward
         avg_reward = np.mean(rewards)
-        plt.axhline(y=avg_reward, color=colors[0] if algorithm != 'both' else colors[i], 
-                    linestyle='--', alpha=0.7,
-                    label=f"{run_label} Avg: {avg_reward:.2f}")
+        avg_rewards.append(avg_reward)
     
     # Add reference lines for the Mountain Car task
-    plt.axhline(y=-160, color='black', linestyle='--', alpha=0.5, label='Solve The Problem')
-    plt.axhline(y=-110, color='green', linestyle='--', alpha=0.5, label='Ideal Goal')
+    plt.axhline(y=-160, color='black', linestyle='--', label='Solve The Problem')
+    plt.axhline(y=-110, color='yellow', linestyle='--', label='Ideal Goal')
+    
+    # Plot average lines with higher visibility
+    for i, avg in enumerate(avg_rewards):
+        color_idx = 0 if algorithm != 'both' else i
+        plt.axhline(y=avg, color=colors[color_idx], linestyle='-', linewidth=2,
+                    label=f"{labels[color_idx]} Avg: {avg:.2f}")
     
     # Add labels and title
-    plt.xlabel('Episode', fontsize=12)
-    plt.ylabel('Reward', fontsize=12)
-    plt.title('Test Results for Trained Agents', fontsize=14)
+    plt.xlabel('Episodes')
+    plt.ylabel('Reward')
+    plt.title(f'Test Results: {"Q-Learning vs DQN" if algorithm == "both" else algorithm.replace("_", "-").title()} for Mountain Car')
+    plt.legend()
     plt.grid(True, alpha=0.3)
-    plt.legend(loc='best')
     
-    # Add a text box with summary statistics
-    textbox_content = "Summary Statistics:\n"
+    # Add a table with statistics in the second subplot, similar to the training plot
+    plt.subplot(2, 1, 2)
+    plt.axis('off')
+    
+    # Calculate statistics
+    data = [['Metric']]
     for i, rewards in enumerate(rewards_list):
-        alg_label = labels[0] if algorithm != 'both' else labels[i]
-        textbox_content += f"{alg_label} (Run {run_ids[i]}): "
-        textbox_content += f"Avg={np.mean(rewards):.2f}, Min={min(rewards):.2f}, Max={max(rewards):.2f}\n"
+        color_idx = 0 if algorithm != 'both' else i
+        data[0].append(f"{labels[color_idx]} (Run {run_ids[i]})")
     
-    plt.figtext(0.5, 0.01, textbox_content, ha='center', fontsize=10, 
-                bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+    data.append(['Average Reward'])
+    data.append(['Min Reward'])
+    data.append(['Max Reward'])
+    data.append(['Episodes'])
+    
+    for i, rewards in enumerate(rewards_list):
+        data[1].append(f'{np.mean(rewards):.2f}')
+        data[2].append(f'{np.min(rewards):.2f}')
+        data[3].append(f'{np.max(rewards):.2f}')
+        data[4].append(f'{len(rewards)}')
+    
+    # Create a table with statistics
+    table = plt.table(cellText=data, loc='center', cellLoc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1, 2)
     
     # Save the figure
+    plt.tight_layout()
     output_file = f"comparison/{file_prefix}_{algorithm}.png"
-    plt.tight_layout(pad=3.0)
     plt.savefig(output_file, dpi=300)
-    print(f"Test results plot saved to {output_file}")
-    plt.close()
     
     # Also save as PDF for higher quality
     output_file_pdf = f"comparison/{file_prefix}_{algorithm}.pdf"
     plt.savefig(output_file_pdf)
+    
+    print(f"Test results plot saved to {output_file}")
+    plt.close()
+    
+    # Also create a simplified plot to match the normalized training curve
+    plt.figure(figsize=(10, 6))
+    
+    for i, rewards in enumerate(rewards_list):
+        color_idx = 0 if algorithm != 'both' else i
+        alg_label = labels[color_idx]
+        episodes = range(1, len(rewards) + 1)
+        
+        # Normalize the episode length
+        x = np.linspace(0, 1, len(rewards))
+        
+        # Plot normalized rewards
+        plt.plot(x, rewards, linewidth=2, color=colors[color_idx], alpha=0.7,
+                 label=f"{alg_label} (Run {run_ids[i]})")
+    
+    plt.xlabel('Normalized Test Progress')
+    plt.ylabel('Reward')
+    plt.title(f'Test Results: Normalized Rewards')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Add a text box with key statistics
+    stats = ""
+    for i, rewards in enumerate(rewards_list):
+        color_idx = 0 if algorithm != 'both' else i
+        alg_label = labels[color_idx]
+        stats += f"{alg_label} (Run {run_ids[i]}): Avg = {np.mean(rewards):.2f}, " \
+                 f"Min = {np.min(rewards):.2f}, Max = {np.max(rewards):.2f}\n"
+    
+    plt.figtext(0.5, 0.01, stats, ha='center', fontsize=10, bbox=dict(facecolor='white', alpha=0.8))
+    
+    plt.tight_layout()
+    plt.savefig(f"comparison/{file_prefix}_{algorithm}_normalized.png", dpi=300)
+    plt.close()
 
 def main():
     parser = argparse.ArgumentParser(description='Compare Q-Learning and DQN for Mountain Car')
