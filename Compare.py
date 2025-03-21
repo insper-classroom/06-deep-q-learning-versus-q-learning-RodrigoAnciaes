@@ -445,11 +445,11 @@ def plot_comparison(q_learning_rewards, dqn_rewards, q_times, dqn_times, smoothi
     
     # Plot individual Q-learning runs
     for i, rewards in enumerate(q_learning_rewards):
-        plt.plot(rewards, alpha=0.3, color='blue')
+        plt.plot(rewards, alpha=0.15, color='blue')
     
     # Plot individual DQN runs
     for i, rewards in enumerate(dqn_rewards):
-        plt.plot(rewards, alpha=0.3, color='red')
+        plt.plot(rewards, alpha=0.15, color='red')
     
     # Find lengths for proper alignment
     q_min_length = min(len(rewards) for rewards in q_learning_rewards)
@@ -472,6 +472,10 @@ def plot_comparison(q_learning_rewards, dqn_rewards, q_times, dqn_times, smoothi
     # Plot mean rewards
     plt.plot(q_smoothed, linewidth=2, color='blue', label=f'Q-Learning ({len(q_learning_rewards)} runs)')
     plt.plot(dqn_smoothed, linewidth=2, color='red', label=f'DQN ({len(dqn_rewards)} runs)')
+
+    # plot a line at the goal
+    plt.axhline(y=-160, color='black', linestyle='--', label='Solve The Problem')
+    plt.axhline(y=-110, color='yellow', linestyle='--', label='Ideal Goal')
     
     plt.xlabel('Episodes')
     plt.ylabel('Reward')
@@ -538,14 +542,205 @@ def plot_comparison(q_learning_rewards, dqn_rewards, q_times, dqn_times, smoothi
     plt.savefig('comparison/mountain_car_normalized_comparison.png', dpi=300)
     plt.close()
 
+def test_trained_agent(algorithm, run_id, render=False, max_episodes=10, seed=None):
+    """
+    Test a trained agent on the Mountain Car environment.
+    
+    Parameters:
+        algorithm (str): 'q_learning' or 'dqn'
+        run_id (int): ID of the run to test
+        render (bool): Whether to render the environment
+        max_episodes (int): Number of test episodes
+        seed (int): Random seed for reproducibility
+    
+    Returns:
+        list: Rewards for each test episode
+    """
+    import gymnasium as gym
+    import numpy as np
+    import torch
+    import time
+    import random
+    
+    # Create environment with rendering if requested
+    render_mode = "human" if render else None
+    env = gym.make('MountainCar-v0', render_mode=render_mode)
+    
+    # Set seed for reproducibility if provided
+    if seed is not None:
+        seed_value = seed + run_id * 100
+        np.random.seed(seed_value)
+        torch.manual_seed(seed_value)
+        random.seed(seed_value)
+        env.action_space.seed(seed_value)
+    
+    rewards = []
+    
+    if algorithm == 'q_learning':
+        # Load Q-table
+        try:
+            q_table = np.load(f'data/comparison_q_table_run_{run_id}.npy', allow_pickle=True)
+            print(f"Loaded Q-table for run {run_id}")
+        except FileNotFoundError:
+            print(f"Error: Could not find Q-table for run {run_id}")
+            return []
+        
+        # Create bins for discretizing state space
+        num_bins = q_table.shape[0]  # Extract bin count from q_table shape
+        bins = []
+        for i in range(env.observation_space.shape[0]):
+            bins.append(np.linspace(
+                env.observation_space.low[i],
+                env.observation_space.high[i],
+                num_bins + 1
+            ))
+            
+        # Define discretize function
+        def discretize_state(state):
+            indices = []
+            for i, s in enumerate(state):
+                index = np.digitize(s, bins[i]) - 1
+                index = min(num_bins - 1, max(0, index))
+                indices.append(index)
+            return tuple(indices)
+        
+        # Test Q-learning agent
+        for episode in range(max_episodes):
+            state, _ = env.reset()
+            total_reward = 0
+            done = False
+            steps = 0
+            
+            while not done:
+                # Discretize state and choose best action
+                discrete_state = discretize_state(state)
+                action = np.argmax(q_table[discrete_state])
+                
+                # Take action
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                
+                # Update state and reward
+                state = next_state
+                total_reward += reward
+                steps += 1
+                
+                # Check if episode is done
+                if terminated or truncated:
+                    done = True
+                
+                if render:
+                    # Add small delay when rendering to make it viewable
+                    time.sleep(0.01)
+            
+            print(f"Q-Learning Episode {episode+1}: Reward = {total_reward}, Steps = {steps}")
+            rewards.append(total_reward)
+    
+    elif algorithm == 'dqn':
+        # Load DQN model
+        try:
+            from collections import deque
+            model_path = f'data/comparison_dqn_model_run_{run_id}.pth'
+            
+            # Create QNetwork model
+            input_dim = env.observation_space.shape[0]
+            output_dim = env.action_space.n
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            
+            # Define QNetwork class (same as in the main code)
+            class QNetwork(torch.nn.Module):
+                def __init__(self, input_dim, output_dim):
+                    super(QNetwork, self).__init__()
+                    self.fc1 = torch.nn.Linear(input_dim, 64)
+                    self.fc2 = torch.nn.Linear(64, output_dim)
+
+                def forward(self, x):
+                    x = torch.relu(self.fc1(x))
+                    x = self.fc2(x)
+                    return x
+            
+            # Create model and load saved weights
+            model = QNetwork(input_dim, output_dim).to(device)
+            model.load_state_dict(torch.load(model_path, map_location=device))
+            model.eval()
+            print(f"Loaded DQN model for run {run_id}")
+        except FileNotFoundError:
+            print(f"Error: Could not find DQN model for run {run_id}")
+            return []
+        
+        # Test DQN agent
+        for episode in range(max_episodes):
+            state, _ = env.reset()
+            state = np.reshape(state, (1, input_dim))
+            total_reward = 0
+            done = False
+            steps = 0
+            
+            while not done:
+                # Convert state to tensor and get action
+                state_tensor = torch.FloatTensor(state).to(device)
+                with torch.no_grad():
+                    q_values = model(state_tensor)
+                action = torch.argmax(q_values).item()
+                
+                # Take action
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                
+                # Update state and reward
+                next_state = np.reshape(next_state, (1, input_dim))
+                state = next_state
+                total_reward += reward
+                steps += 1
+                
+                # Check if episode is done
+                if terminated or truncated:
+                    done = True
+                
+                if render:
+                    # Add small delay when rendering to make it viewable
+                    time.sleep(0.01)
+            
+            print(f"DQN Episode {episode+1}: Reward = {total_reward}, Steps = {steps}")
+            rewards.append(total_reward)
+    
+    else:
+        print(f"Error: Unknown algorithm '{algorithm}'")
+    
+    env.close()
+    return rewards
+
 def main():
     parser = argparse.ArgumentParser(description='Compare Q-Learning and DQN for Mountain Car')
     parser.add_argument('--runs', type=int, default=5, help='Number of runs for each algorithm (default: 5)')
     parser.add_argument('--episodes', type=int, default=5000, help='Maximum number of episodes per run (default: 1000)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility (default: 42)')
     parser.add_argument('--load', action='store_true', help='Load previously saved results instead of running new experiments')
+    parser.add_argument('--test', action='store_true', help='Test a trained agent instead of training')
+    parser.add_argument('--render', action='store_true', help='Render the environment during testing')
+    parser.add_argument('--algorithm', type=str, choices=['q_learning', 'dqn', 'both'], default='both',
+                       help='Algorithm to test (q_learning, dqn, or both)')
+    parser.add_argument('--test_episodes', type=int, default=5, help='Number of episodes to test (default: 5)')
+    parser.add_argument('--test_run', type=int, default=0, help='Run ID to test (default: 0)')
+    
     
     args = parser.parse_args()
+
+        # Update main function with new test branch
+    if args.test:
+        print("Testing trained agent(s)...")
+        
+        if args.algorithm == 'both' or args.algorithm == 'q_learning':
+            print("\nTesting Q-Learning agent:")
+            q_rewards = test_trained_agent('q_learning', args.test_run, render=args.render, 
+                                          max_episodes=args.test_episodes, seed=args.seed)
+            print(f"Average reward over {len(q_rewards)} episodes: {np.mean(q_rewards):.2f}")
+        
+        if args.algorithm == 'both' or args.algorithm == 'dqn':
+            print("\nTesting DQN agent:")
+            dqn_rewards = test_trained_agent('dqn', args.test_run, render=args.render, 
+                                            max_episodes=args.test_episodes, seed=args.seed)
+            print(f"Average reward over {len(dqn_rewards)} episodes: {np.mean(dqn_rewards):.2f}")
+        
+        return  # Skip the training/loading part
     
     if args.load:
         # Load previously saved results
@@ -580,8 +775,8 @@ def main():
                 print(f"Warning: Could not find Q-learning rewards for run {i}")
             
             try:
-                dqn_rewards = load_rewards_from_csv(f'comparison/dqn_rewards_run_{i}.csv')
-                dqn_rewards.append(dqn_rewards)
+                dqn_run_rewards = load_rewards_from_csv(f'comparison/dqn_rewards_run_{i}.csv')
+                dqn_rewards.append(dqn_run_rewards)
             except FileNotFoundError:
                 print(f"Warning: Could not find DQN rewards for run {i}")
     else:
