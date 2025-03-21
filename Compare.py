@@ -706,7 +706,96 @@ def test_trained_agent(algorithm, run_id, render=False, max_episodes=10, seed=No
         print(f"Error: Unknown algorithm '{algorithm}'")
     
     env.close()
-    return rewards
+        # At the end of the function, modify the return statement to include more info:
+    return {
+        'rewards': rewards,
+        'run_id': run_id,
+        'algorithm': algorithm,
+        'avg_reward': np.mean(rewards) if rewards else 0,
+        'min_reward': min(rewards) if rewards else 0,
+        'max_reward': max(rewards) if rewards else 0
+    }
+
+def plot_test_results(algorithm, rewards_list, run_ids, file_prefix="test_results"):
+    """
+    Plot the results of testing trained agents.
+    
+    Parameters:
+        algorithm (str): 'q_learning', 'dqn', or 'both'
+        rewards_list (list): List of reward lists for each tested agent
+        run_ids (list): List of run IDs corresponding to the rewards
+        file_prefix (str): Prefix for the output file name
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    # Make sure the comparison directory exists
+    import os
+    os.makedirs("comparison", exist_ok=True)
+    
+    # Set up the plot
+    plt.figure(figsize=(12, 8))
+    
+    # Choose colors based on algorithm
+    colors = []
+    labels = []
+    
+    if algorithm == 'q_learning':
+        colors = ['blue']
+        labels = ['Q-Learning']
+    elif algorithm == 'dqn':
+        colors = ['red']
+        labels = ['DQN']
+    else:  # 'both'
+        colors = ['blue', 'red']
+        labels = ['Q-Learning', 'DQN']
+    
+    # Plot the rewards for each episode
+    for i, rewards in enumerate(rewards_list):
+        episodes = range(1, len(rewards) + 1)
+        alg_label = labels[0] if algorithm != 'both' else labels[i]
+        run_label = f"{alg_label} (Run {run_ids[i]})"
+        
+        plt.plot(episodes, rewards, marker='o', color=colors[0] if algorithm != 'both' else colors[i], 
+                 label=run_label, linewidth=2, markersize=8)
+        
+        # Calculate and print average reward
+        avg_reward = np.mean(rewards)
+        plt.axhline(y=avg_reward, color=colors[0] if algorithm != 'both' else colors[i], 
+                    linestyle='--', alpha=0.7,
+                    label=f"{run_label} Avg: {avg_reward:.2f}")
+    
+    # Add reference lines for the Mountain Car task
+    plt.axhline(y=-160, color='black', linestyle='--', alpha=0.5, label='Solve The Problem')
+    plt.axhline(y=-110, color='green', linestyle='--', alpha=0.5, label='Ideal Goal')
+    
+    # Add labels and title
+    plt.xlabel('Episode', fontsize=12)
+    plt.ylabel('Reward', fontsize=12)
+    plt.title('Test Results for Trained Agents', fontsize=14)
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc='best')
+    
+    # Add a text box with summary statistics
+    textbox_content = "Summary Statistics:\n"
+    for i, rewards in enumerate(rewards_list):
+        alg_label = labels[0] if algorithm != 'both' else labels[i]
+        textbox_content += f"{alg_label} (Run {run_ids[i]}): "
+        textbox_content += f"Avg={np.mean(rewards):.2f}, Min={min(rewards):.2f}, Max={max(rewards):.2f}\n"
+    
+    plt.figtext(0.5, 0.01, textbox_content, ha='center', fontsize=10, 
+                bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+    
+    # Save the figure
+    output_file = f"comparison/{file_prefix}_{algorithm}.png"
+    plt.tight_layout(pad=3.0)
+    plt.savefig(output_file, dpi=300)
+    print(f"Test results plot saved to {output_file}")
+    plt.close()
+    
+    # Also save as PDF for higher quality
+    output_file_pdf = f"comparison/{file_prefix}_{algorithm}.pdf"
+    plt.savefig(output_file_pdf)
 
 def main():
     parser = argparse.ArgumentParser(description='Compare Q-Learning and DQN for Mountain Car')
@@ -720,6 +809,8 @@ def main():
                        help='Algorithm to test (q_learning, dqn, or both)')
     parser.add_argument('--test_episodes', type=int, default=5, help='Number of episodes to test (default: 5)')
     parser.add_argument('--test_run', type=int, default=0, help='Run ID to test (default: 0)')
+    parser.add_argument('--plot-test', action='store_true', 
+                        help='Plot the results of testing trained agents')
     
     
     args = parser.parse_args()
@@ -727,18 +818,37 @@ def main():
         # Update main function with new test branch
     if args.test:
         print("Testing trained agent(s)...")
+        results = []
+        run_ids = []
         
         if args.algorithm == 'both' or args.algorithm == 'q_learning':
             print("\nTesting Q-Learning agent:")
-            q_rewards = test_trained_agent('q_learning', args.test_run, render=args.render, 
-                                          max_episodes=args.test_episodes, seed=args.seed)
-            print(f"Average reward over {len(q_rewards)} episodes: {np.mean(q_rewards):.2f}")
+            q_results = test_trained_agent('q_learning', args.test_run, render=args.render, 
+                                           max_episodes=args.test_episodes, seed=args.seed)
+            if q_results['rewards']:
+                results.append(q_results['rewards'])
+                run_ids.append(args.test_run)
+                print(f"Average reward over {len(q_results['rewards'])} episodes: {q_results['avg_reward']:.2f}")
         
         if args.algorithm == 'both' or args.algorithm == 'dqn':
             print("\nTesting DQN agent:")
-            dqn_rewards = test_trained_agent('dqn', args.test_run, render=args.render, 
-                                            max_episodes=args.test_episodes, seed=args.seed)
-            print(f"Average reward over {len(dqn_rewards)} episodes: {np.mean(dqn_rewards):.2f}")
+            dqn_results = test_trained_agent('dqn', args.test_run, render=args.render, 
+                                             max_episodes=args.test_episodes, seed=args.seed)
+            if dqn_results['rewards']:
+                if args.algorithm == 'both':
+                    # For 'both', we'll plot Q-learning and DQN together
+                    results.append(dqn_results['rewards'])
+                    run_ids.append(args.test_run)
+                else:
+                    # For just 'dqn', we'll reset the list to only include DQN
+                    results = [dqn_results['rewards']]
+                    run_ids = [args.test_run]
+                print(f"Average reward over {len(dqn_results['rewards'])} episodes: {dqn_results['avg_reward']:.2f}")
+        
+        # Plot test results if requested
+        if args.plot_test and results:
+            print("\nPlotting test results...")
+            plot_test_results(args.algorithm, results, run_ids)
         
         return  # Skip the training/loading part
     
